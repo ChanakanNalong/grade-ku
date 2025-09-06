@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: "@Kan11113@05110405"
+      MYSQL_DATABASE: ku_grade
+      MYSQL_USER: chanakan
+      MYSQL_PASSWORD: "@Kan11113@05110405"
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p@Kan11113@05110405"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mynetwork
+  
+  api:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_USER: chanakan
+      DB_PASSWORD: "@Kan11113@05110405"
+      DB_DATABASE: ku_grade
+    networks:
+      - mynetwork
+
+  web:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - CHOKIDAR_USEPOLLING=true   # ใช้ชื่อ service "api" แทน IP
+    networks:
+      - mynetwork
+
+networks:
+  mynetwork:
+    driver: bridge
