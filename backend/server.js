@@ -8,25 +8,41 @@ require('dotenv').config();
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '@Kan11113@05110405',
+  password: process.env.DB_PASSWORD || '',
   database: process.env.DB_DATABASE || 'ku_grade',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
 });
 
+process.on('SIGINT', async () => {
+  console.log('Shutting down, closing DB pool...');
+  await pool.end();
+  process.exit(0);
+});
+
+
 // Helper: อ่าน body
-function getRequestBody(req) {
+function getRequestBody(req, limitBytes = 1e6) { // ~1MB
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', chunk => body += chunk.toString());
+    let received = 0;
+    req.on('data', chunk => {
+      received += chunk.length;
+      if (received > limitBytes) {
+        req.destroy(); // ปิด connection
+        return reject({ type: 'too_large' });
+      }
+      body += chunk.toString();
+    });
     req.on('end', () => {
       try {
-        resolve(JSON.parse(body));
+        resolve(JSON.parse(body || '{}'));
       } catch (err) {
-        reject(err);
+        reject({ type: 'invalid_json', err });
       }
     });
+    req.on('error', err => reject({ type: 'stream_error', err }));
   });
 }
 
@@ -49,31 +65,42 @@ const server = http.createServer(async (req, res) => {
   if (method === 'POST' && path === '/register') {
     try {
       const body = await getRequestBody(req);
-      const { name, email, password } = body;
+      console.log("body will send:", body);
 
-      if (!name || !email || !password) {
+      const {
+        student_id, // ไม่ใช้ใน insert ถ้าเป็น AUTO_INCREMENT
+        username,
+        password,
+        Fname,
+        Lname,
+        faculty,
+        dept,
+        email,
+        phone
+      } = body;
+
+      if (!student_id || !username || !password || !Fname || !Lname || !faculty || !dept || !email || !phone) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'Missing fields' }));
       }
 
-      // เช็ค email
-      const [rows] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+      const [rows] = await pool.query('SELECT student_id FROM users WHERE email = ?', [email]);
       if (rows.length > 0) {
         res.writeHead(409, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'Email already exists' }));
       }
 
-      // hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // insert user
       const [result] = await pool.query(
-        'INSERT INTO users (name, email, password, created_at) VALUES (?, ?, ?, NOW())',
-        [name, email, hashedPassword]
+        `INSERT INTO users
+       (student_id, username, password, Fname, Lname, faculty, dept, email, phone, create_time)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [student_id, username, hashedPassword, Fname, Lname, faculty, dept, email, phone]
       );
 
       res.writeHead(201, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ message: 'User registered successfully', userId: result.insertId }));
+      res.end(JSON.stringify({ message: 'User registered successfully', userId: student_id }));
     } catch (err) {
       console.error("Register error:", err);
       res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -81,6 +108,7 @@ const server = http.createServer(async (req, res) => {
     }
     return;
   }
+
 
   // ---------------- Login ----------------
   if (method === 'POST' && path === '/login') {
@@ -93,7 +121,7 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ error: 'Missing fields' }));
       }
 
-      const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+      const [rows] = await pool.query('SELECT * FROM old_users WHERE email = ?', [email]);
       if (rows.length === 0) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'Invalid email or password' }));
@@ -120,9 +148,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---------------- Get All Users ----------------
-  if (method === 'GET' && path === '/users') {
+  if (method === 'GET' && path === '/old_users') {
     try {
-      const [results] = await pool.query('SELECT id, name, email, created_at FROM users');
+      const [results] = await pool.query('SELECT id, name, email, created_at FROM old_users');
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(results));
     } catch (err) {

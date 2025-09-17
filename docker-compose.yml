@@ -22,8 +22,12 @@ services:
   
   api:
     build: ./backend
+    image: grade-ku-api:latest
     ports:
       - "5000:5000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
     depends_on:
       db:
         condition: service_healthy
@@ -37,8 +41,12 @@ services:
 
   web:
     build: ./frontend
+    image: grade-ku-web:latest
     ports:
       - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     environment:
       - CHOKIDAR_USEPOLLING=true   # ใช้ชื่อ service "api" แทน IP
     networks:

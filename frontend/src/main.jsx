@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
 import App from './App.jsx'
-import Register from './Register.jsx'
+import Register from './register.jsx'
 import Login from './Login.jsx'
 
 function Root() {
@@ -10,7 +10,7 @@ function Root() {
     <BrowserRouter>
       <nav style={{ padding: 12 }}>
         <Link to="/" style={{ marginRight: 12 }}>Home</Link>
-        <Link to="/register" style={{ marginRight: 12 }}>Register</Link>
+        <Link to="/register" style={{ marginRight: 12 }}>Old Register</Link>
         <Link to="/login">Login</Link>
       </nav>
 
